@@ -89,5 +89,5 @@ def run_bot():
 while True:
     print("🔁 Running trading cycle...")
     run_bot()
-    print("⏳ Waiting 15 minutes...\n")
-    time.sleep(900)
+    print("⏳ Waiting 5 minutes...\n")
+    time.sleep(300)
