@@ -18,7 +18,7 @@ exchange = ccxt.binance({
 
 symbol_suffix = "/USDT"
 max_positions = 3
-capital_fraction = 1
+#capital_fraction = 1
 rsi_threshold = 30
 positions_file = "positions.json"
 take_profit = 1.05
@@ -63,7 +63,7 @@ def run_bot():
     positions = load_positions()
     balance = exchange.fetch_balance()
     usdt_balance = balance['total']['USDT']
-    trade_amount = usdt_balance * capital_fraction
+    trade_amount = usdt_balance #* capital_fraction
 
     top_symbols = get_top_symbols()
 
