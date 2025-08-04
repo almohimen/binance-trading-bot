@@ -18,7 +18,7 @@ exchange = ccxt.binance({
 
 symbol_suffix = "/USDT"
 max_positions = 3
-capital_fraction = 0.10
+capital_fraction = 0.50
 rsi_threshold = 30
 positions_file = "positions.json"
 take_profit = 1.05
