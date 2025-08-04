@@ -6,6 +6,7 @@ import pandas as pd
 import ta
 import os
 
+# Load API keys from environment
 API_KEY = os.getenv("API_KEY")
 API_SECRET = os.getenv("API_SECRET")
 
@@ -15,13 +16,13 @@ exchange = ccxt.binance({
     'enableRateLimit': True
 })
 
-symbol_prefix = "/USDT"
+symbol_suffix = "/USDT"
 max_positions = 3
 capital_fraction = 0.10
 rsi_threshold = 30
+positions_file = "positions.json"
 take_profit = 1.05
 stop_loss = 0.97
-positions_file = "positions.json"
 
 def load_positions():
     try:
@@ -38,13 +39,25 @@ def get_top_symbols(limit=20):
     url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=volume_desc&per_page=20&page=1"
     response = requests.get(url)
     data = response.json()
-    return [coin['symbol'].upper() + symbol_prefix for coin in data if coin['symbol'].upper() + symbol_prefix in exchange.load_markets()]
+    return [coin['symbol'].upper() + symbol_suffix for coin in data if coin['symbol'].upper() + symbol_suffix in exchange.load_markets()]
 
-def get_rsi(symbol):
+def get_indicators(symbol):
     bars = exchange.fetch_ohlcv(symbol, timeframe='1h', limit=100)
     df = pd.DataFrame(bars, columns=["time", "open", "high", "low", "close", "volume"])
-    df["rsi"] = ta.momentum.RSIIndicator(df["close"]).rsi()
-    return df["rsi"].iloc[-1], df["close"].iloc[-1]
+    df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
+    macd = ta.trend.MACD(df['close'])
+    df['macd'] = macd.macd()
+    df['macd_signal'] = macd.macd_signal()
+    df['avg_volume'] = df['volume'].rolling(window=20).mean()
+    latest = df.iloc[-1]
+    return {
+        "rsi": latest["rsi"],
+        "macd": latest["macd"],
+        "macd_signal": latest["macd_signal"],
+        "volume": latest["volume"],
+        "avg_volume": latest["avg_volume"],
+        "price": latest["close"]
+    }
 
 def run_bot():
     positions = load_positions()
@@ -57,14 +70,19 @@ def run_bot():
     for symbol in top_symbols:
         if symbol in positions or len(positions) >= max_positions:
             continue
+
         try:
-            rsi, price = get_rsi(symbol)
-            if rsi < rsi_threshold:
-                print(f"📉 BUY SIGNAL: {symbol} - RSI: {rsi:.2f}")
-                amount = trade_amount / price
-                order = exchange.create_market_buy_order(symbol, amount)
+            indicators = get_indicators(symbol)
+            if (
+                indicators["rsi"] < rsi_threshold and
+                indicators["macd"] > indicators["macd_signal"] and
+                indicators["volume"] > 1.5 * indicators["avg_volume"]
+            ):
+                print(f"📉 BUY: {symbol} - RSI {indicators['rsi']:.2f}, MACD Crossover, Volume Surge")
+                amount = trade_amount / indicators["price"]
+                exchange.create_market_buy_order(symbol, amount)
                 positions[symbol] = {
-                    "buy_price": price,
+                    "buy_price": indicators["price"],
                     "amount": amount
                 }
                 save_positions(positions)
@@ -86,8 +104,9 @@ def run_bot():
         except Exception as e:
             print(f"Error checking sell for {symbol}: {e}")
 
+# Run every 5 minutes
 while True:
     print("🔁 Running trading cycle...")
     run_bot()
-    print("⏳ Waiting 3 minutes...\n")
-    time.sleep(180)
+    print("⏳ Waiting 5 minutes...")
+    time.sleep(300)
